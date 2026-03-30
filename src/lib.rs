@@ -1,3 +1,26 @@
+use bao1x_api::IoxPort;
+use bytemuck::{Pod, Zeroable};
+use hex_literal::hex;
+use rand::Rng;
+use std::io::{Read, Write};
+
+pub const DC34_DICT: &str = "dc34";
+pub const DC34_SECRET: &str = "k0";
+pub const DC34_TOUR: &str = "tour";
+pub const DC34_TOKEN_TOUR: &str = "tokentour";
+pub const DC34_BADGE: &str = "badge";
+pub const DC34_GENE: &str = "gene";
+
+// chosen by fair dice roll. guaranteed to be random.
+pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
+
+pub const SAO_GPIO: [(IoxPort, u8); 4] = [
+    (IoxPort::PC, 5),
+    (IoxPort::PC, 6),
+    (IoxPort::PC, 14),
+    (IoxPort::PC, 15),
+];
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum BadgeType {
@@ -102,12 +125,370 @@ impl BadgeType {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MutationRate {
+    None = 0,
+    Baseline = 64,
+    Elevated = 100,
+    Radioactive = 140,
+    Apocalyptic = 240,
+}
+impl MutationRate {
+    pub fn to_bit_changes(self) -> u8 {
+        let val = self as u8;
+        if val == 0 {
+            0
+        } else if val < 128 {
+            1
+        } else if val < 240 {
+            2
+        } else {
+            5
+        }
+    }
+    pub fn roll(&self) -> bool {
+        if *self == MutationRate::None {
+            false
+        } else {
+            rand::thread_rng().gen::<u8>() < *self as u8
+        }
+    }
+}
+
 pub const LED_SERVER: &'static str = "_dc34_led_";
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum LedManagerOp {
     Autogamy,
     Force,
-    GeneInit,
+    GeneTest,
+    SetGene,
     Syngamy,
     Invalid,
+}
+
+#[derive(
+    Default, Pod, Zeroable, Copy, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
+)]
+#[repr(C)]
+pub struct Haploid {
+    pub cd_period: u8,
+    pub cd_rate: u8,
+    pub cd_dir: u8,
+    pub sat: u8,
+    pub hue_ratedir: u8,
+    pub hue_base: u8,
+    pub hue_bound: u8,
+    pub chaser: u8,
+    pub nonlin: u8,
+}
+impl Haploid {
+    pub fn from_rand() -> Self {
+        let mut h = Haploid::default();
+        h.cd_period = rand::thread_rng().gen_range(0..6);
+        h.cd_rate = rand::thread_rng().gen();
+        h.cd_dir = rand::thread_rng().gen();
+        h.sat = rand::thread_rng().gen();
+        h.hue_ratedir = rand::thread_rng().gen();
+        h.hue_base = rand::thread_rng().gen();
+        h.hue_bound = rand::thread_rng().gen();
+        h.chaser = rand::thread_rng().gen();
+        h.nonlin = rand::thread_rng().gen();
+        h
+    }
+
+    pub fn from_type(badge_type: &BadgeType) -> Self {
+        let mut h = Haploid::default();
+        h.cd_period = rand::thread_rng().gen_range(0..badge_type.cd_period_max());
+        h.cd_rate = rand::thread_rng().gen();
+        h.cd_dir = rand::thread_rng().gen_range(badge_type.cd_dir_range());
+        h.sat = rand::thread_rng().gen_range(badge_type.sat_range());
+        h.hue_ratedir = rand::thread_rng().gen();
+        h.hue_base = rand::thread_rng().gen_range(badge_type.hue_range());
+        if *badge_type == BadgeType::Goon {
+            // ensure that red is always part of the Goon pallette
+            h.hue_base = 0;
+        }
+        h.hue_bound = rand::thread_rng().gen_range(h.hue_base..=badge_type.hue_range().end);
+        if *badge_type == BadgeType::Uber {
+            h.hue_bound = 255;
+        }
+        h.chaser = rand::thread_rng().gen_range(badge_type.chaser_range());
+        h.nonlin = rand::thread_rng().gen_range(badge_type.nonlin_range());
+        h
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        bytemuck::bytes_of(self).to_vec()
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        bytemuck::try_from_bytes(bytes).ok().copied()
+    }
+
+    /// always returns a length-4 serialization, suitable for Xous args
+    pub fn serialize_u32(&self) -> [u32; 4] {
+        let bytes = bytemuck::bytes_of(self);
+        let mut padded = [0u8; 16];
+        padded[..bytes.len()].copy_from_slice(bytes);
+        let mut out = [0u32; 4];
+        for (i, chunk) in padded.chunks(4).enumerate() {
+            out[i] = u32::from_le_bytes(chunk.try_into().unwrap());
+        }
+        out
+    }
+
+    /// gracefully handles 4 args by truncating the extra args that are just padding inserted by
+    /// serialize_u32()
+    pub fn deserialize_u32(words: &[u32]) -> Option<Self> {
+        let bytes: Vec<u8> = words
+            .iter()
+            .flat_map(|w| w.to_le_bytes())
+            .take(std::mem::size_of::<Haploid>())
+            .collect();
+        bytemuck::try_from_bytes(&bytes).ok().copied()
+    }
+}
+
+#[derive(Debug, Copy, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct Diploid(pub [Haploid; 2]);
+
+impl Diploid {
+    // computes the phenotypic expression of the diploid genome by blending the haploid pairs according
+    // to rules that create dominant/recessive traits. In reality you don't get another strand of DNA, you get
+    // proteins, but 'meh'. Close enough for computer science.
+    pub fn phenotype(&self) -> Haploid {
+        let mut e = Haploid {
+            // add -> periodicity tends toward the mean, capped at 6 periods
+            cd_period: ((self.0[0].cd_period + self.0[1].cd_period) / 2).min(6),
+            // average -> rate tends toward the mean
+            cd_rate: ((self.0[0].cd_rate as u16 + self.0[1].cd_rate as u16) / 2) as u8,
+            // add -> clockwise direction is dominant
+            cd_dir: self.0[0].cd_dir.saturating_add(self.0[1].cd_dir),
+            // add -> saturated colors are dominant
+            sat: self.0[0].sat.saturating_add(self.0[1].sat),
+            // inverse add -> slower hue cycling is dominant
+            hue_ratedir: (2
+                + (14
+                    - self.0[0]
+                        .hue_ratedir
+                        .saturating_add(self.0[1].hue_ratedir)
+                        .min(14)))
+                % 14,
+            // min -> wider color range is dominant
+            hue_base: self.0[0].hue_base.min(self.0[1].hue_base),
+            // max -> wider color range is dominant
+            hue_bound: self.0[0].hue_bound.max(self.0[1].hue_bound),
+            // chaser -> large chaser values (which is no chaser) is dominant
+            chaser: self.0[0].chaser.saturating_add(self.0[1].chaser),
+            // nonlin -> brightness correction is dominant
+            nonlin: self.0[0].chaser.saturating_add(self.0[1].nonlin),
+        };
+        // ensure that the bound is always bigger than the base
+        e.hue_bound = e.hue_bound.max(e.hue_base);
+        e
+    }
+    pub fn send(&self, conn: xous::CID, opcode: usize) {
+        let buf = xous_ipc::Buffer::into_buf(self.clone()).unwrap();
+        buf.lend(conn, opcode as u32).unwrap();
+    }
+    pub fn receive(mem: &xous::MemoryMessage) -> Self {
+        let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
+        let gene = buffer.to_original::<Diploid, _>().unwrap();
+        gene
+    }
+    pub fn meiosis(&self) -> Haploid {
+        let mut gamete = Haploid::default();
+        let parent: usize = rand::thread_rng().gen_range(0..2);
+        gamete.cd_period = self.0[parent].cd_period;
+        gamete.cd_rate = self.0[parent].cd_rate;
+        gamete.cd_dir = self.0[parent].cd_dir;
+
+        gamete.sat = self.0[rand::thread_rng().gen_range(0..2)].sat;
+
+        let parent: usize = rand::thread_rng().gen_range(0..2);
+        gamete.hue_ratedir = self.0[parent].hue_ratedir;
+        gamete.hue_base = self.0[parent].hue_base;
+        gamete.hue_bound = self.0[parent].hue_bound;
+
+        gamete.chaser = self.0[rand::thread_rng().gen_range(0..2)].chaser;
+        gamete.nonlin = self.0[rand::thread_rng().gen_range(0..2)].nonlin;
+        gamete
+    }
+}
+
+impl Diploid {
+    pub fn serialize(&self) -> Vec<u8> {
+        [self.0[0].serialize(), self.0[1].serialize()]
+            .concat()
+            .to_vec()
+    }
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        let size = std::mem::size_of::<Haploid>();
+        if bytes.len() < size * 2 {
+            return None;
+        }
+        let a = Haploid::deserialize(&bytes[..size])?;
+        let b = Haploid::deserialize(&bytes[size..size * 2])?;
+        Some(Diploid([a, b]))
+    }
+}
+
+// Haploid and Diploid *must* be thread-safe. Don't add stuff to it that's not Send + Sync
+#[allow(dead_code)]
+trait AssertSendSync: Send + Sync {}
+impl AssertSendSync for Haploid {}
+impl AssertSendSync for Diploid {}
+
+pub fn init_light_gene(badge_type: BadgeType) {
+    let pddb = pddb::Pddb::new();
+    let mut badge_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_BADGE,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    badge_key.write(&[badge_type as u8]).ok();
+
+    let individual = Diploid([
+        Haploid::from_type(&badge_type),
+        Haploid::from_type(&badge_type),
+    ]);
+    log::info!("Created individual: {:?} / {:?}", badge_type, individual);
+    save_light_gene(individual);
+}
+
+/// A potentially time-expensive operation to read the light gene from PDDB storage
+pub fn get_light_gene() -> Option<Diploid> {
+    let pddb = pddb::Pddb::new();
+    let mut gene_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_GENE,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    let mut buf = [0u8; std::mem::size_of::<Haploid>() * 2];
+    gene_key.read_exact(&mut buf).ok()?;
+    let ret = Diploid::deserialize(&buf);
+    log::info!("Read in gene: {:?}", ret);
+    ret
+}
+
+/// A potentially time-expensive operation to commit the light gene to PDDB storage
+pub fn save_light_gene(gene: Diploid) {
+    let pddb = pddb::Pddb::new();
+    let mut gene_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_GENE,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    gene_key.write_all(&gene.serialize()).ok();
+}
+
+pub fn save_k0(k0: &[u8; 32]) {
+    let pddb = pddb::Pddb::new();
+    let mut k0_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_SECRET,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    k0_key.write_all(k0).ok();
+}
+
+pub fn get_k0() -> Option<[u8; 32]> {
+    let mut k0_buf = [0u8; 32];
+    let pddb = pddb::Pddb::new();
+    let mut k0_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_SECRET,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    let result = k0_key.read(&mut k0_buf);
+    match result {
+        Ok(len) => {
+            if len == 32 {
+                Some(k0_buf)
+            } else {
+                None
+            }
+        }
+        Err(_e) => None,
+    }
+}
+
+pub fn mutate(gamete: &mut Haploid, rate: MutationRate) {
+    let bits = rate.to_bit_changes();
+
+    if rate.roll() {
+        gamete.cd_period = mutation_func(gamete.cd_period, bits) % 6;
+    }
+    if rate.roll() {
+        gamete.cd_rate = mutation_func(gamete.cd_rate, bits);
+    }
+    if rate.roll() {
+        gamete.cd_dir = mutation_func(gamete.cd_dir, bits);
+    }
+    if rate.roll() {
+        gamete.sat = mutation_func(gamete.sat, bits);
+    }
+    if rate.roll() {
+        gamete.hue_ratedir = mutation_func(gamete.hue_ratedir, bits);
+    }
+    if rate.roll() {
+        gamete.hue_base = mutation_func(gamete.hue_base, bits);
+    }
+    if rate.roll() {
+        gamete.hue_bound = mutation_func(gamete.hue_bound, bits);
+    }
+    if rate.roll() {
+        gamete.chaser = mutation_func(gamete.chaser, bits);
+    }
+    if rate.roll() {
+        gamete.nonlin = mutation_func(gamete.nonlin, bits);
+    }
+}
+
+fn mutation_func(gene: u8, bits: u8) -> u8 {
+    gray_decode(gray_encode(gene) ^ (bits << (rand::thread_rng().gen_range(0..=7))))
+}
+
+fn gray_encode(n: u8) -> u8 {
+    n ^ (n >> 1)
+}
+
+fn gray_decode(mut n: u8) -> u8 {
+    let mut p = n;
+    while n >> 1 != 0 {
+        n >>= 1;
+        p ^= n;
+    }
+    p
 }
