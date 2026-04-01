@@ -21,6 +21,28 @@ pub const SAO_GPIO: [(IoxPort, u8); 4] = [
     (IoxPort::PC, 15),
 ];
 
+pub const LED_SERVER: &'static str = "_dc34_led_";
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum LedManagerOp {
+    Autogamy,
+    Force,
+    GeneTest,
+    SetGene,
+    Syngamy,
+    Invalid,
+}
+
+pub const POWER_MANAGER_SERVER: &'static str = "_dc34_pwr_mgr_";
+#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
+pub enum PowerManagerOp {
+    Enable,
+    Poll,
+    MotionIrq,
+    KeyPress,
+    SetFadeMode,
+    Invalid,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum BadgeType {
@@ -154,17 +176,6 @@ impl MutationRate {
             rand::thread_rng().gen::<u8>() < *self as u8
         }
     }
-}
-
-pub const LED_SERVER: &'static str = "_dc34_led_";
-#[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
-pub enum LedManagerOp {
-    Autogamy,
-    Force,
-    GeneTest,
-    SetGene,
-    Syngamy,
-    Invalid,
 }
 
 #[derive(
@@ -380,7 +391,7 @@ pub fn get_light_gene() -> Option<Diploid> {
     let mut buf = [0u8; std::mem::size_of::<Haploid>() * 2];
     gene_key.read_exact(&mut buf).ok()?;
     let ret = Diploid::deserialize(&buf);
-    log::info!("Read in gene: {:?}", ret);
+    log::debug!("Read in gene: {:?}", ret);
     ret
 }
 
