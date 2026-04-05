@@ -40,6 +40,9 @@ pub enum PowerManagerOp {
     MotionIrq,
     KeyPress,
     SetFadeMode,
+    GetAccelId,
+    GetVbat,
+    GetVbus,
     Invalid,
 }
 
