@@ -38,6 +38,7 @@ pub enum PowerManagerOp {
     Enable,
     Poll,
     MotionIrq,
+    VbusIrq,
     KeyPress,
     SetFadeMode,
     GetAccelId,
