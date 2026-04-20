@@ -44,6 +44,7 @@ pub enum PowerManagerOp {
     GetAccelId,
     GetVbat,
     GetVbus,
+    Boot,
     Invalid,
 }
 
