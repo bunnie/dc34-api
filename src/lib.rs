@@ -21,7 +21,7 @@ pub const SAO_GPIO: [(IoxPort, u8); 4] = [
     (IoxPort::PC, 15),
 ];
 
-pub const LED_SERVER: &'static str = "_dc34_led_";
+pub const LED_SERVER: &'static str = "_oem_led_";
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
 pub enum LedManagerOp {
     Autogamy,
@@ -29,7 +29,10 @@ pub enum LedManagerOp {
     GeneTest,
     SetGene,
     Syngamy,
+    JackEyes,
     Invalid,
+    // this is a hard-coded inside the bio-service to avoid leaking project to public repos
+    Pause = 128,
 }
 
 pub const POWER_MANAGER_SERVER: &'static str = "_dc34_pwr_mgr_";
@@ -45,6 +48,8 @@ pub enum PowerManagerOp {
     GetVbat,
     GetVbus,
     Boot,
+    ForceWfi,
+    ForceDeepSleep,
     Invalid,
 }
 
