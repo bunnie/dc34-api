@@ -84,64 +84,64 @@ impl TryFrom<u8> for BadgeType {
     }
 }
 impl BadgeType {
-    pub fn hue_range(&self) -> std::ops::Range<u8> {
+    pub fn hue_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
-            Self::Goon => 0..20,
-            Self::Community => 32..80,
-            Self::Village => 80..128,
-            Self::Human => 128..160,
-            Self::Other => 160..192,
-            Self::CtfContest => 192..220,
-            Self::Uber => 220..255,
-            Self::None => 128..160,
+            Self::Goon => 0..=20,
+            Self::Community => 32..=80,
+            Self::Village => 80..=128,
+            Self::Human => 128..=160,
+            Self::Other => 160..=192,
+            Self::CtfContest => 192..=220,
+            Self::Uber => 220..=255,
+            Self::None => 128..=160,
         }
     }
-    pub fn sat_range(&self) -> std::ops::Range<u8> {
+    pub fn sat_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
-            Self::Goon => 160..255,
-            Self::Community => 32..160,
-            Self::Village => 32..160,
-            Self::Human => 32..255,
-            Self::Other => 16..255,
-            Self::CtfContest => 16..255,
-            Self::Uber => 16..160,
-            Self::None => 32..255,
+            Self::Goon => 160..=255,
+            Self::Community => 32..=160,
+            Self::Village => 32..=160,
+            Self::Human => 32..=255,
+            Self::Other => 16..=255,
+            Self::CtfContest => 16..=255,
+            Self::Uber => 130..=255,
+            Self::None => 32..=255,
         }
     }
-    pub fn chaser_range(&self) -> std::ops::Range<u8> {
+    pub fn chaser_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
-            Self::Goon => 90..255,
-            Self::Community => 90..255,
-            Self::Village => 90..255,
-            Self::Human => 90..255,
-            Self::Other => 0..255,
-            Self::CtfContest => 90..255,
-            Self::Uber => 0..45,
-            Self::None => 90..255,
+            Self::Goon => 90..=255,
+            Self::Community => 90..=255,
+            Self::Village => 90..=255,
+            Self::Human => 90..=255,
+            Self::Other => 0..=255,
+            Self::CtfContest => 90..=255,
+            Self::Uber => 0..=45,
+            Self::None => 90..=255,
         }
     }
-    pub fn nonlin_range(&self) -> std::ops::Range<u8> {
+    pub fn nonlin_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
-            Self::Goon => 0..255,
-            Self::Community => 0..255,
-            Self::Village => 0..255,
-            Self::Human => 0..255,
-            Self::Other => 0..90,
-            Self::CtfContest => 0..90,
-            Self::Uber => 0..44,
-            Self::None => 0..255,
+            Self::Goon => 0..=255,
+            Self::Community => 0..=255,
+            Self::Village => 0..=255,
+            Self::Human => 0..=255,
+            Self::Other => 0..=90,
+            Self::CtfContest => 0..=90,
+            Self::Uber => 0..=44,
+            Self::None => 0..=255,
         }
     }
-    pub fn cd_dir_range(&self) -> std::ops::Range<u8> {
+    pub fn cd_dir_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
-            Self::Goon => 0..255,
-            Self::Community => 0..255,
-            Self::Village => 0..45,
-            Self::Human => 0..255,
-            Self::Other => 0..255,
-            Self::CtfContest => 0..255,
-            Self::Uber => 0..45,
-            Self::None => 0..255,
+            Self::Goon => 0..=255,
+            Self::Community => 0..=255,
+            Self::Village => 0..=45,
+            Self::Human => 0..=255,
+            Self::Other => 0..=255,
+            Self::CtfContest => 0..=255,
+            Self::Uber => 0..=45,
+            Self::None => 0..=255,
         }
     }
     pub fn cd_period_max(&self) -> u8 {
@@ -149,10 +149,10 @@ impl BadgeType {
             Self::Goon => 4,
             Self::Community => 2,
             Self::Village => 4,
-            Self::Human => 4,
+            Self::Human => 5,
             Self::Other => 6,
             Self::CtfContest => 6,
-            Self::Uber => 2,
+            Self::Uber => 3,
             Self::None => 4,
         }
     }
@@ -169,15 +169,12 @@ pub enum MutationRate {
 }
 impl MutationRate {
     pub fn to_bit_changes(self) -> u8 {
-        let val = self as u8;
-        if val == 0 {
-            0
-        } else if val < 128 {
-            1
-        } else if val < 240 {
-            2
-        } else {
-            5
+        match self {
+            MutationRate::None => 0,
+            MutationRate::Baseline => 1,
+            MutationRate::Elevated => 3,
+            MutationRate::Radioactive => 7,
+            MutationRate::Apocalyptic => 0x1f,
         }
     }
     pub fn roll(&self) -> bool {
@@ -193,8 +190,8 @@ impl MutationRate {
     pub fn from_param(param: u8) -> MutationRate {
         let rate = match param {
             0..20 => Self::Baseline,
-            20..50 => Self::Elevated,
-            50..100 => Self::Radioactive,
+            20..60 => Self::Elevated,
+            60..100 => Self::Radioactive,
             _ => Self::Apocalyptic,
         };
         log::info!("mutation param {} -> rate {:?}", param, rate);
@@ -220,7 +217,7 @@ pub struct Haploid {
 impl Haploid {
     pub fn from_rand() -> Self {
         let mut h = Haploid::default();
-        h.cd_period = rand::thread_rng().gen_range(0..6);
+        h.cd_period = rand::thread_rng().gen_range(0..=6);
         h.cd_rate = rand::thread_rng().gen();
         h.cd_dir = rand::thread_rng().gen();
         h.sat = rand::thread_rng().gen();
@@ -234,7 +231,7 @@ impl Haploid {
 
     pub fn from_type(badge_type: &BadgeType) -> Self {
         let mut h = Haploid::default();
-        h.cd_period = rand::thread_rng().gen_range(0..badge_type.cd_period_max());
+        h.cd_period = rand::thread_rng().gen_range(0..=badge_type.cd_period_max());
         h.cd_rate = rand::thread_rng().gen();
         h.cd_dir = rand::thread_rng().gen_range(badge_type.cd_dir_range());
         h.sat = rand::thread_rng().gen_range(badge_type.sat_range());
@@ -244,7 +241,7 @@ impl Haploid {
             // ensure that red is always part of the Goon pallette
             h.hue_base = 0;
         }
-        h.hue_bound = rand::thread_rng().gen_range(h.hue_base..=badge_type.hue_range().end);
+        h.hue_bound = rand::thread_rng().gen_range(h.hue_base..=*badge_type.hue_range().end());
         if *badge_type == BadgeType::Uber {
             h.hue_bound = 255;
         }
@@ -483,7 +480,7 @@ pub fn mutate(gamete: &mut Haploid, rate: MutationRate) {
     let bits = rate.to_bit_changes();
 
     if rate.roll() {
-        gamete.cd_period = mutation_func(gamete.cd_period, bits) % 6;
+        gamete.cd_period = mutation_func(gamete.cd_period, bits) % 7;
     }
     if rate.roll() {
         gamete.cd_rate = mutation_func(gamete.cd_rate, bits);
