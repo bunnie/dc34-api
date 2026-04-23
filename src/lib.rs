@@ -10,6 +10,7 @@ pub const DC34_TOUR: &str = "tour";
 pub const DC34_TOKEN_TOUR: &str = "tokentour";
 pub const DC34_BADGE: &str = "badge";
 pub const DC34_GENE: &str = "gene";
+pub const DC34_IMAGE: &str = "image";
 
 // chosen by fair dice roll. guaranteed to be random.
 pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
@@ -157,7 +158,7 @@ impl BadgeType {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[repr(u8)]
 pub enum MutationRate {
     None = 0,
@@ -185,6 +186,19 @@ impl MutationRate {
         } else {
             rand::thread_rng().gen::<u8>() < *self as u8
         }
+    }
+    // arbitrary mapping from a state parameter in the main loop. Tune this to
+    // make things "fun". Want to make about 8 toggles equal one level, each toggle
+    // increments by 4.
+    pub fn from_param(param: u8) -> MutationRate {
+        let rate = match param {
+            0..20 => Self::Baseline,
+            20..50 => Self::Elevated,
+            50..100 => Self::Radioactive,
+            _ => Self::Apocalyptic,
+        };
+        log::info!("mutation param {} -> rate {:?}", param, rate);
+        rate
     }
 }
 
