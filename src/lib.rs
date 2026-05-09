@@ -32,6 +32,7 @@ pub enum LedManagerOp {
     Syngamy,
     JackEyes,
     Invalid,
+    SetTestRate,
     // this is a hard-coded inside the bio-service to avoid leaking project to public repos
     Pause = 128,
 }
@@ -51,6 +52,7 @@ pub enum PowerManagerOp {
     Boot,
     ForceWfi,
     ForceDeepSleep,
+    PowerOff,
     Invalid,
 }
 
@@ -167,6 +169,17 @@ pub enum MutationRate {
     Radioactive = 140,
     Apocalyptic = 240,
 }
+impl PartialOrd for MutationRate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MutationRate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (*self as u8).cmp(&(*other as u8))
+    }
+}
 impl MutationRate {
     pub fn to_bit_changes(self) -> u8 {
         match self {
@@ -191,7 +204,7 @@ impl MutationRate {
         let rate = match param {
             0..20 => Self::Baseline,
             20..60 => Self::Elevated,
-            60..100 => Self::Radioactive,
+            60..85 => Self::Radioactive,
             _ => Self::Apocalyptic,
         };
         log::info!("mutation param {} -> rate {:?}", param, rate);
