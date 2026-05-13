@@ -202,12 +202,11 @@ impl MutationRate {
     // increments by 4.
     pub fn from_param(param: u8) -> MutationRate {
         let rate = match param {
-            0..20 => Self::Baseline,
-            20..60 => Self::Elevated,
-            60..85 => Self::Radioactive,
+            0..30 => Self::Baseline,
+            30..70 => Self::Elevated,
+            70..120 => Self::Radioactive,
             _ => Self::Apocalyptic,
         };
-        log::info!("mutation param {} -> rate {:?}", param, rate);
         rate
     }
 }
