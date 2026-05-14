@@ -53,6 +53,7 @@ pub enum PowerManagerOp {
     ForceWfi,
     ForceDeepSleep,
     PowerOff,
+    ScreenOffRequest,
     Invalid,
 }
 
