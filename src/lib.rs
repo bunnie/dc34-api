@@ -12,6 +12,8 @@ pub const DC34_BADGE: &str = "badge";
 pub const DC34_GENE: &str = "gene";
 pub const DC34_IMAGE: &str = "image";
 
+pub const SERVER_NAME_VAULT2: &str = "_Vault2_";
+
 // chosen by fair dice roll. guaranteed to be random.
 pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
 
