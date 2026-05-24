@@ -11,6 +11,9 @@ pub const DC34_TOKEN_TOUR: &str = "tokentour";
 pub const DC34_BADGE: &str = "badge";
 pub const DC34_GENE: &str = "gene";
 pub const DC34_IMAGE: &str = "image";
+pub const DC34_BIO: &str = "bio.code";
+pub const DC34_BIO_PINS: &str = "bio.pins";
+pub const DC34_BIO_CLK: &str = "bio.clk";
 
 pub const SERVER_NAME_VAULT2: &str = "_Vault2_";
 
