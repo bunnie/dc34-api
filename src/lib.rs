@@ -59,6 +59,7 @@ pub enum PowerManagerOp {
     ForceDeepSleep,
     PowerOff,
     ScreenOffRequest,
+    PauseAccel,
     Invalid,
 }
 
