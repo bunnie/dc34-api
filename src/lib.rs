@@ -461,11 +461,44 @@ pub fn save_k0(k0: &[u8; 32]) {
             None,
             true,
             true,
-            Some(1),
+            Some(32),
             None::<fn()>,
         )
         .expect("couldn't get PDDB key");
     k0_key.write_all(k0).ok();
+
+    // this also resets the BadgeType when the key is assigned
+    // this is safe because the key is only known to the assigner -
+    // if someone calls this without the correct key, they lose
+    // access to the light exchange protocol, and also lose the key.
+    // In which case, sure, you can show colors on your badge that
+    // aren't supposed to be yours, but you can't share them with
+    // anyone else.
+    let mut badge_key = pddb
+        .get(
+            DC34_DICT,
+            DC34_BADGE,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    badge_key.write(&[BadgeType::None as u8]).ok();
+    let mut key = pddb
+        .get(
+            DC34_DICT,
+            DC34_TOUR,
+            None,
+            true,
+            true,
+            Some(1),
+            None::<fn()>,
+        )
+        .expect("couldn't get PDDB key");
+    key.write(&[0]).ok();
+    pddb.sync().ok();
 }
 
 pub fn get_k0() -> Option<[u8; 32]> {
