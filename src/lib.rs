@@ -17,6 +17,11 @@ pub const DC34_BIO_CLK: &str = "bio.clk";
 
 pub const SERVER_NAME_VAULT2: &str = "_Vault2_";
 
+/// This is the offset of the one-way counter used to gate operations that
+/// can only be run in the factory: once this is greater than 0, the operations
+/// are disabled. 128 is the beginning of the 'application' range for OWC.
+pub const FACTORY_ONE_WAY: usize = 128;
+
 // chosen by fair dice roll. guaranteed to be random.
 pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
 
