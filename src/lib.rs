@@ -65,6 +65,7 @@ pub enum PowerManagerOp {
     PowerOff,
     ScreenOffRequest,
     PauseAccel,
+    FeedWdt,
     Invalid,
 }
 
